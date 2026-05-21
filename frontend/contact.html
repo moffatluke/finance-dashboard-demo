@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Contact · Tally</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+  <div id="sidebar-slot"></div>
+  <main class="main">
+    <div class="page">
+      <div id="content"><div class="loading">LOADING CONTACT…</div></div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-slot"></div>
+
+<script src="app.js"></script>
+<script>
+function statusBadge(status) {
+  const cls = { Lead: "badge-lead", Contacted: "badge-contacted", Customer: "badge-customer" }[status] || "badge-lead";
+  return `<span class="badge ${cls}">${escapeHtml(status || "—")}</span>`;
+}
+
+async function loadContact() {
+  const id = new URLSearchParams(location.search).get("id");
+  if (!id) {
+    document.getElementById("content").innerHTML = `<div class="error">No contact id in the URL. <a href="contacts.html">Back to contacts</a></div>`;
+    return;
+  }
+  try {
+    // Backend has no GET-single endpoint, so list + filter
+    const [contacts, transactions] = await Promise.all([api.contacts.list(), api.transactions.list()]);
+    const c = contacts.find(x => x.id === id);
+    if (!c) {
+      document.getElementById("content").innerHTML = `<div class="error">Contact not found. <a href="contacts.html">Back to contacts</a></div>`;
+      return;
+    }
+    document.getElementById("modal-slot").innerHTML = modalAddTransaction(contacts);
+
+    const txs = transactions
+      .filter(t => t.contactId === c.id)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    const totalRev = txs.filter(t => t.type === "income").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const totalExp = txs.filter(t => t.type === "expense").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+
+    document.getElementById("content").innerHTML = `
+      <a href="contacts.html" class="btn-link" style="display:inline-block;margin-bottom:16px;color:var(--ink-soft)">← All contacts</a>
+      <div style="display:flex;align-items:center;gap:20px;margin-bottom:28px;flex-wrap:wrap">
+        <div class="avatar avatar-lg ${avatarColor(c.id)}">${initials(c.name)}</div>
+        <div style="flex:1;min-width:240px">
+          <h1 class="page-title" style="font-size:40px">${escapeHtml(c.name)}</h1>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap">
+            <span style="color:var(--ink-soft);font-size:14px">${escapeHtml(c.company || "—")}</span>
+            <span style="color:var(--line)">·</span>
+            ${statusBadge(c.status)}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${c.email ? `<a class="btn btn-ghost" href="mailto:${encodeURIComponent(c.email)}">Email</a>` : ""}
+          <button class="btn btn-ghost" onclick="alert('Edit form not wired in this milestone — coming next.')">Edit</button>
+          <button class="btn btn-ghost" onclick="deleteContact('${c.id}')" style="color:var(--danger);border-color:var(--danger)">Delete</button>
+          <button class="btn btn-primary" onclick="openAddTx()">+ Log transaction</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card card-sm">
+            <div class="field-label" style="margin-bottom:10px">CONTACT</div>
+            <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+              <div>
+                <div class="field-label" style="margin-bottom:2px">EMAIL</div>
+                <div style="color:var(--ink)">${escapeHtml(c.email || "—")}</div>
+              </div>
+              <div>
+                <div class="field-label" style="margin-bottom:2px">PHONE</div>
+                <div style="color:var(--ink)">${escapeHtml(c.phone || "—")}</div>
+              </div>
+              <div>
+                <div class="field-label" style="margin-bottom:2px">FOLLOW-UP</div>
+                <div style="color:var(--ink)">${c.followUpDate ? fmtDate(c.followUpDate, { month: "long", day: "numeric", year: "numeric" }) : "—"}</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card-sm">
+            <div class="field-label" style="margin-bottom:8px">REVENUE</div>
+            <div style="font-family:var(--font-display);font-size:36px;color:var(--olive);line-height:1.2">${fmtMoney(totalRev)}</div>
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:4px">across ${txs.filter(t => t.type === "income").length} payment${txs.filter(t => t.type === "income").length === 1 ? "" : "s"}</div>
+            ${totalExp > 0 ? `<div style="font-size:11px;color:var(--ink-faint);margin-top:6px">Expenses tagged: <span style="font-family:var(--font-mono);color:var(--ink-soft)">${fmtMoney(totalExp)}</span></div>` : ""}
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card">
+            <div class="card-title" style="font-size:20px;margin-bottom:10px">Notes</div>
+            <div style="font-size:14px;color:var(--ink-soft);line-height:1.6">${escapeHtml(c.notes || "—")}</div>
+          </div>
+          <div class="card">
+            <div class="card-title" style="font-size:20px;margin-bottom:14px">Transactions</div>
+            ${txs.length === 0 ? `<div style="font-size:13px;color:var(--ink-faint);padding:20px 0">No transactions logged for this contact yet.</div>` : txs.map(tx => `
+              <div style="display:flex;align-items:center;padding:10px 0;gap:12px;border-bottom:1px solid var(--line)">
+                <div class="tx-icon ${tx.type === "income" ? "tx-icon-in" : "tx-icon-out"}">${tx.type === "income" ? "↓" : "↑"}</div>
+                <div style="flex:1">
+                  <div style="font-size:13px;color:var(--ink)">${escapeHtml(tx.description)}</div>
+                  <div style="font-size:11px;color:var(--ink-faint)">${escapeHtml(tx.category)} · ${fmtDate(tx.date, { month: "short", day: "numeric", year: "numeric" })} · ${escapeHtml(tx.paymentMethod || "")}</div>
+                </div>
+                <div style="font-family:var(--font-mono);font-size:13px;color:${tx.type === "income" ? "var(--olive)" : "var(--ink)"}">${fmtSigned(tx.amount, tx.type)}</div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    renderApiError(document.getElementById("content"), err);
+  }
+}
+
+async function deleteContact(id) {
+  if (!confirm("Delete this contact? This can't be undone.")) return;
+  try {
+    await api.contacts.remove(id);
+    location.href = "contacts.html";
+  } catch (err) {
+    alert("Could not delete: " + err.message);
+  }
+}
+
+bootPage("contacts");
+loadContact();
+</script>
+
+</body>
+</html>

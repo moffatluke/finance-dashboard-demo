@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Contacts · Tally</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+  <div id="sidebar-slot"></div>
+
+  <main class="main">
+    <div class="page">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">YOUR PEOPLE</div>
+          <h1 class="page-title">Contacts <span class="meta" id="contact-count">·</span></h1>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('modal-add-contact')">+ Add contact</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="pill-group" id="status-pills">
+          <button class="pill active" data-status="">All</button>
+          <button class="pill" data-status="Lead">Lead</button>
+          <button class="pill" data-status="Contacted">Contacted</button>
+          <button class="pill" data-status="Customer">Customer</button>
+        </div>
+        <input class="input" id="search" placeholder="Search by name, company, email…" />
+      </div>
+
+      <div id="content"><div class="loading">LOADING CONTACTS…</div></div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-slot"></div>
+
+<script src="app.js"></script>
+<script>
+let allContacts = [];
+let activeStatus = "";
+let searchQuery = "";
+
+function statusBadge(status) {
+  const cls = { Lead: "badge-lead", Contacted: "badge-contacted", Customer: "badge-customer" }[status] || "badge-lead";
+  return `<span class="badge ${cls}">${escapeHtml(status || "—")}</span>`;
+}
+
+function renderContacts() {
+  const q = searchQuery.toLowerCase();
+  const filtered = allContacts.filter(c =>
+    (!activeStatus || c.status === activeStatus) &&
+    (!q || (c.name + " " + (c.company || "") + " " + (c.email || "")).toLowerCase().includes(q))
+  );
+
+  if (allContacts.length === 0) {
+    document.getElementById("content").innerHTML = `
+      <div class="empty">
+        <svg width="180" height="140" viewBox="0 0 180 140" style="margin-bottom:8px">
+          <rect x="20" y="30" width="140" height="90" rx="14" fill="var(--surface-alt)" stroke="var(--line)" />
+          <rect x="36" y="48" width="50" height="6" rx="3" fill="var(--line)" />
+          <rect x="36" y="62" width="80" height="6" rx="3" fill="var(--line)" />
+          <rect x="36" y="76" width="34" height="6" rx="3" fill="var(--line)" />
+          <circle cx="140" cy="36" r="16" fill="var(--primary)" />
+          <path d="M 134 36 L 138 40 L 146 32" stroke="var(--primary-ink)" stroke-width="2.5" fill="none" stroke-linecap="round" />
+        </svg>
+        <h2>No people yet.</h2>
+        <p>Contacts hold everyone you sell to, follow up with, or work alongside.</p>
+        <button class="btn btn-primary" onclick="openModal('modal-add-contact')">+ Add your first contact</button>
+      </div>
+    `;
+    return;
+  }
+
+  if (filtered.length === 0) {
+    document.getElementById("content").innerHTML = `<div class="empty"><h2>No matches.</h2><p>Try a different search or status filter.</p></div>`;
+    return;
+  }
+
+  document.getElementById("content").innerHTML = `
+    <div class="contact-grid">
+      ${filtered.map(c => `
+        <a class="contact-card" href="contact.html?id=${encodeURIComponent(c.id)}">
+          <div class="contact-card-head">
+            <div class="avatar ${avatarColor(c.id)}" style="width:44px;height:44px;font-size:16px">${initials(c.name)}</div>
+            <div style="flex:1;min-width:0">
+              <div class="contact-name">${escapeHtml(c.name)}</div>
+              <div class="contact-company">${escapeHtml(c.company || "—")}</div>
+            </div>
+            ${statusBadge(c.status)}
+          </div>
+          <div class="contact-notes">${escapeHtml((c.notes || "").slice(0, 90))}${(c.notes || "").length > 90 ? "…" : ""}</div>
+          <div class="contact-foot">
+            <span>Follow up · ${c.followUpDate ? fmtDate(c.followUpDate) : "—"}</span>
+            <span style="font-family:var(--font-mono);color:var(--ink-soft)">${escapeHtml(c.email || "")}</span>
+          </div>
+        </a>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function loadContacts() {
+  try {
+    allContacts = await api.contacts.list();
+    document.getElementById("modal-slot").innerHTML = modalAddContact();
+    document.getElementById("contact-count").textContent = "· " + allContacts.length;
+    // Wire pill counts
+    document.querySelectorAll("#status-pills .pill").forEach(p => {
+      const s = p.dataset.status;
+      const n = s ? allContacts.filter(c => c.status === s).length : allContacts.length;
+      p.innerHTML = `${p.textContent.split(" ")[0]} <span class="pill-count">${n}</span>`;
+    });
+    renderContacts();
+  } catch (err) {
+    renderApiError(document.getElementById("content"), err);
+  }
+}
+
+document.getElementById("status-pills").addEventListener("click", (e) => {
+  if (!e.target.matches("[data-status]")) return;
+  activeStatus = e.target.dataset.status;
+  document.querySelectorAll("#status-pills .pill").forEach(p => p.classList.toggle("active", p === e.target));
+  renderContacts();
+});
+document.getElementById("search").addEventListener("input", (e) => {
+  searchQuery = e.target.value;
+  renderContacts();
+});
+
+bootPage("contacts");
+loadContacts();
+</script>
+
+</body>
+</html>

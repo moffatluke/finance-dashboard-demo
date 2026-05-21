@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Dashboard · Tally</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+  <div id="sidebar-slot"></div>
+
+  <main class="main">
+    <div class="page">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow" id="greeting-date">—</div>
+          <h1 class="page-title">Good morning, <span class="accent">Sam.</span></h1>
+          <div class="page-subtitle" id="greeting-sub">Loading your day…</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" onclick="openModal('modal-add-contact')">+ Contact</button>
+          <button class="btn btn-primary" onclick="openAddTx()">+ Transaction</button>
+        </div>
+      </div>
+
+      <div id="content"><div class="loading">LOADING DASHBOARD…</div></div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-slot"></div>
+
+<script src="app.js"></script>
+<script>
+// ─── Chart helpers (vanilla SVG) ────────────────────────────
+function areaChart(data, width = 660, height = 220) {
+  if (!data.length) return "";
+  const pad = { l: 36, r: 12, t: 16, b: 28 };
+  const max = Math.max(1, ...data.flatMap(d => [d.income, d.expense])) * 1.15;
+  const x = i => pad.l + (i * (width - pad.l - pad.r)) / Math.max(1, data.length - 1);
+  const y = v => height - pad.b - (v / max) * (height - pad.t - pad.b);
+  const path = (key) => {
+    const pts = data.map((d, i) => [x(i), y(d[key])]);
+    if (!pts.length) return "";
+    let p = `M ${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < pts.length; i++) {
+      const cx = (pts[i-1][0] + pts[i][0]) / 2;
+      p += ` C ${cx} ${pts[i-1][1]}, ${cx} ${pts[i][1]}, ${pts[i][0]} ${pts[i][1]}`;
+    }
+    return p;
+  };
+  const area = (key) => `${path(key)} L ${x(data.length-1)} ${height-pad.b} L ${x(0)} ${height-pad.b} Z`;
+  return `
+    <svg class="chart" viewBox="0 0 ${width} ${height}">
+      <defs>
+        <linearGradient id="g-inc" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="var(--olive)" stop-opacity="0.45" />
+          <stop offset="100%" stop-color="var(--olive)" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="g-exp" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.30" />
+          <stop offset="100%" stop-color="var(--primary)" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      ${[0,0.5,1].map(p => `<line x1="${pad.l}" x2="${width-pad.r}" y1="${pad.t + p*(height-pad.t-pad.b)}" y2="${pad.t + p*(height-pad.t-pad.b)}" stroke="var(--line)" stroke-dasharray="2 4" />`).join("")}
+      <path d="${area("income")}" fill="url(#g-inc)" />
+      <path d="${area("expense")}" fill="url(#g-exp)" />
+      <path d="${path("income")}" fill="none" stroke="var(--olive)" stroke-width="2.5" stroke-linejoin="round" />
+      <path d="${path("expense")}" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linejoin="round" />
+      ${data.map((d, i) => `
+        <circle cx="${x(i)}" cy="${y(d.income)}" r="4" fill="var(--surface)" stroke="var(--olive)" stroke-width="2" />
+        <text x="${x(i)}" y="${height-8}" text-anchor="middle" font-size="11" fill="var(--ink-faint)" font-family="var(--font-sans)">${d.month}</text>
+      `).join("")}
+      ${[0,0.5,1].map(p => `<text x="${pad.l-8}" y="${pad.t + p*(height-pad.t-pad.b)+4}" text-anchor="end" font-size="10" fill="var(--ink-faint)" font-family="var(--font-mono)">${Math.round((max*(1-p))/1000)}k</text>`).join("")}
+    </svg>
+  `;
+}
+
+function donutChart(segments, size = 180) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  const r = size/2 - 18, cx = size/2, cy = size/2;
+  let acc = -Math.PI/2;
+  const gap = 0.04;
+  const paths = segments.filter(s => s.value > 0).map(s => {
+    const angle = (s.value / total) * Math.PI * 2;
+    const a0 = acc + gap/2, a1 = acc + angle - gap/2;
+    acc += angle;
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const p0 = [cx + r*Math.cos(a0), cy + r*Math.sin(a0)];
+    const p1 = [cx + r*Math.cos(a1), cy + r*Math.sin(a1)];
+    return `<path d="M ${p0[0]} ${p0[1]} A ${r} ${r} 0 ${large} 1 ${p1[0]} ${p1[1]}" fill="none" stroke="${s.color}" stroke-width="20" stroke-linecap="round" />`;
+  }).join("");
+  return `
+    <svg width="${size}" height="${size}">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-alt)" stroke-width="20" />
+      ${paths}
+      <text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="32" font-family="var(--font-display)" fill="var(--ink)">${total}</text>
+      <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="11" fill="var(--ink-faint)" font-family="var(--font-sans)" letter-spacing="0.08em">CONTACTS</text>
+    </svg>
+  `;
+}
+
+function sparkline(data, color, width = 64, height = 22) {
+  if (!data.length) return "";
+  const max = Math.max(...data), min = Math.min(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => [(i / Math.max(1, data.length - 1)) * width, height - 4 - ((v - min) / range) * (height - 8)]);
+  const d = pts.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
+  return `<svg width="${width}" height="${height}">
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="${pts[pts.length-1][0]}" cy="${pts[pts.length-1][1]}" r="3" fill="${color}" />
+  </svg>`;
+}
+
+// ─── Cash flow aggregator ───────────────────────────────────
+function groupByMonth(transactions, monthCount = 6) {
+  const map = new Map();
+  const today = new Date();
+  for (let i = monthCount - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const key = d.toISOString().slice(0, 7); // YYYY-MM
+    map.set(key, { month: d.toLocaleString("en-US", { month: "short" }), income: 0, expense: 0 });
+  }
+  for (const t of transactions) {
+    const key = (t.date || "").slice(0, 7);
+    if (map.has(key)) {
+      map.get(key)[t.type] = (map.get(key)[t.type] || 0) + (Number(t.amount) || 0);
+    }
+  }
+  return [...map.values()];
+}
+
+// ─── Render dashboard ───────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const [contacts, transactions] = await Promise.all([
+      api.contacts.list(),
+      api.transactions.list(),
+    ]);
+
+    // inject modal HTML (needs contacts list for the dropdown)
+    document.getElementById("modal-slot").innerHTML = modalAddContact() + modalAddTransaction(contacts);
+
+    const totalIncome = transactions.filter(t => t.type === "income").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const totalExpense = transactions.filter(t => t.type === "expense").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const net = totalIncome - totalExpense;
+    const byStatus = { Lead: 0, Contacted: 0, Customer: 0 };
+    contacts.forEach(c => { if (byStatus[c.status] != null) byStatus[c.status]++; });
+
+    const cashflow = groupByMonth(transactions, 6);
+    const followUps = [...contacts]
+      .filter(c => c.followUpDate)
+      .sort((a, b) => new Date(a.followUpDate) - new Date(b.followUpDate))
+      .slice(0, 5);
+    const recent = [...transactions]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5);
+
+    // Update greeting
+    const now = new Date();
+    document.getElementById("greeting-date").textContent =
+      now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }).toUpperCase();
+    document.getElementById("greeting-sub").textContent = followUps.length
+      ? `${followUps.length} follow-up${followUps.length === 1 ? "" : "s"} on your list.`
+      : "A quiet inbox today.";
+
+    const todayD = new Date(); todayD.setHours(0,0,0,0);
+    const sparks = {
+      income: cashflow.map(c => c.income / 1000),
+      expense: cashflow.map(c => c.expense / 1000),
+      net: cashflow.map(c => (c.income - c.expense) / 1000),
+    };
+
+    document.getElementById("content").innerHTML = `
+      <!-- Stat tiles -->
+      <div class="stat-grid" style="margin-bottom:24px">
+        ${[
+          { label: "Revenue",  value: totalIncome, color: "var(--olive)", spark: sparks.income, suffix: "lifetime" },
+          { label: "Expenses", value: totalExpense, color: "var(--primary)", spark: sparks.expense, suffix: "lifetime" },
+          { label: "Net",      value: net, color: "var(--slate)", spark: sparks.net, suffix: "this year" },
+          { label: "Contacts", value: contacts.length, color: "var(--butter)", spark: [byStatus.Lead, byStatus.Lead+byStatus.Contacted, contacts.length], suffix: "in your book", raw: true },
+        ].map(s => `
+          <div class="stat-tile">
+            <div class="stat-tile-head">
+              <span class="stat-tile-label">${s.label}</span>
+              ${sparkline(s.spark, s.color)}
+            </div>
+            <div class="stat-tile-value">${s.raw ? s.value : fmtMoney(s.value)}</div>
+            <div class="stat-tile-note">${s.suffix}</div>
+          </div>
+        `).join("")}
+      </div>
+
+      <!-- Cash flow + pipeline -->
+      <div class="row-2" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Cash flow</div>
+              <div class="card-sub">Last 6 months</div>
+            </div>
+            <div class="legend">
+              <span><span class="legend-dot" style="background:var(--olive)"></span>Income</span>
+              <span><span class="legend-dot" style="background:var(--primary)"></span>Expenses</span>
+            </div>
+          </div>
+          ${areaChart(cashflow)}
+        </div>
+
+        <div class="card">
+          <div class="card-title">Pipeline</div>
+          <div class="card-sub" style="margin-bottom:12px">By status</div>
+          <div style="display:flex;justify-content:center">${donutChart([
+            { value: byStatus.Lead, color: "var(--butter)" },
+            { value: byStatus.Contacted, color: "var(--slate)" },
+            { value: byStatus.Customer, color: "var(--olive)" },
+          ])}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            ${[
+              ["Leads", byStatus.Lead, "var(--butter)"],
+              ["Contacted", byStatus.Contacted, "var(--slate)"],
+              ["Customers", byStatus.Customer, "var(--olive)"],
+            ].map(([l, n, c]) => `
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+                <span><span class="legend-dot" style="background:${c};border-radius:50%"></span>${l}</span>
+                <span style="font-family:var(--font-mono);color:var(--ink-soft)">${n}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+
+      <!-- Follow-ups + recent -->
+      <div class="row-2eq">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Follow-ups due</div>
+            <a href="contacts.html" class="btn-link">See all →</a>
+          </div>
+          ${followUps.length === 0 ? `<div style="font-size:13px;color:var(--ink-faint);padding:12px 0">No follow-ups scheduled.</div>` : followUps.map(c => {
+            const d = new Date(c.followUpDate);
+            const days = Math.round((d - todayD) / 86400000);
+            const soon = days <= 3;
+            return `
+              <a class="list-row" href="contact.html?id=${encodeURIComponent(c.id)}">
+                <div class="avatar ${avatarColor(c.id)}" style="width:32px;height:32px;font-size:12px">${initials(c.name)}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;color:var(--ink);font-weight:500">${escapeHtml(c.name)}</div>
+                  <div style="font-size:11px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(c.company || "")}</div>
+                </div>
+                <div style="text-align:right;font-size:11px;font-family:var(--font-mono);color:${soon ? "var(--primary)" : "var(--ink-soft)"}">
+                  <div>${days <= 0 ? "Today" : "in " + days + "d"}</div>
+                  <div style="color:var(--ink-faint)">${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
+                </div>
+              </a>
+            `;
+          }).join("")}
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Recent activity</div>
+            <a href="transactions.html" class="btn-link">See all →</a>
+          </div>
+          ${recent.length === 0 ? `<div style="font-size:13px;color:var(--ink-faint);padding:12px 0">No transactions yet.</div>` : recent.map(tx => `
+            <div class="list-row" style="cursor:default">
+              <div class="tx-icon ${tx.type === "income" ? "tx-icon-in" : "tx-icon-out"}">${tx.type === "income" ? "↓" : "↑"}</div>
+              <div style="flex:1">
+                <div style="font-size:13px;color:var(--ink)">${escapeHtml(tx.description)}</div>
+                <div style="font-size:11px;color:var(--ink-faint)">${escapeHtml(tx.category)} · ${fmtDate(tx.date)}</div>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:13px;color:${tx.type === "income" ? "var(--olive)" : "var(--ink)"}">${fmtSigned(tx.amount, tx.type)}</div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    renderApiError(document.getElementById("content"), err);
+  }
+}
+
+bootPage("dashboard");
+loadDashboard();
+</script>
+
+</body>
+</html>

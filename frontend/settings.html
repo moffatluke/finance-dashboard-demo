@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Settings · Tally</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+  <div id="sidebar-slot"></div>
+
+  <main class="main">
+    <div class="page-narrow">
+      <h1 class="page-title" style="margin-bottom:24px">Settings</h1>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <div class="card">
+          <div style="display:flex;gap:16px;align-items:center">
+            <div class="avatar c-1" style="width:64px;height:64px;font-size:22px">SR</div>
+            <div style="flex:1">
+              <div style="font-size:18px;color:var(--ink);font-weight:500">Sam Rivera</div>
+              <div style="font-size:13px;color:var(--ink-soft)">sam@grovehousestudio.com</div>
+            </div>
+            <button class="btn btn-ghost" onclick="alert('Profile edit not wired yet — backend has no auth.')">Change avatar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px">Workspace</div>
+          <div id="ws-rows"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px">Appearance</div>
+          <div style="display:flex;gap:12px">
+            <button class="theme-card" data-theme="light" onclick="pickTheme('light')">
+              <div style="font-size:24px;margin-bottom:6px">☀</div>
+              <div style="font-size:14px;color:var(--ink);font-weight:500">Seaside</div>
+              <div style="font-size:11px;color:var(--ink-faint)">Cream paper, coral accents</div>
+            </button>
+            <button class="theme-card" data-theme="cappuccino" onclick="pickTheme('cappuccino')">
+              <div style="font-size:24px;margin-bottom:6px">☕</div>
+              <div style="font-size:14px;color:var(--ink);font-weight:500">Cappuccino</div>
+              <div style="font-size:11px;color:var(--ink-faint)">Warm latte, espresso ink</div>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px">Categories</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px" id="cat-row"></div>
+          <div style="font-size:11px;color:var(--ink-faint);margin-top:12px">Categories are stored on each transaction. To rename or add new ones, edit them when logging a transaction.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px">Data</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-ghost" onclick="exportContacts()">Export contacts (JSON)</button>
+            <button class="btn btn-ghost" onclick="exportTransactions()">Export transactions (JSON)</button>
+          </div>
+          <div style="font-size:11px;color:var(--ink-faint);margin-top:12px">Downloads the current snapshot from your Firestore database.</div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<style>
+.theme-card {
+  flex: 1; border: 2px solid var(--line); border-radius: 16px; padding: 18px;
+  background: var(--surface-alt); cursor: pointer; text-align: left;
+  font-family: var(--font-sans);
+}
+.theme-card.active { border-color: var(--primary); }
+</style>
+
+<script src="app.js"></script>
+<script>
+function pickTheme(theme) {
+  setTheme(theme);
+  document.querySelectorAll(".theme-card").forEach(b => b.classList.toggle("active", b.dataset.theme === theme));
+}
+
+function renderStatic() {
+  const rows = [
+    ["Workspace name", "Grove House Studio"],
+    ["Default currency", "USD · $"],
+    ["Fiscal year start", "January"],
+    ["Time zone", "America / Los Angeles"],
+  ];
+  document.getElementById("ws-rows").innerHTML = rows.map((row, i) => `
+    <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:${i < rows.length - 1 ? "1px solid var(--line)" : "none"};font-size:13px">
+      <span style="color:var(--ink-soft)">${row[0]}</span>
+      <span style="color:var(--ink)">${row[1]}</span>
+    </div>
+  `).join("");
+
+  const cats = ["Retainer", "Project", "Wholesale", "Consulting", "Software", "Contractor", "Office", "Travel"];
+  document.getElementById("cat-row").innerHTML = cats.map(c => `
+    <span style="padding:6px 12px;border-radius:999px;background:var(--surface-alt);font-size:12px;color:var(--ink);border:1px solid var(--line)">${c}</span>
+  `).join("");
+
+  // Reflect current theme selection
+  pickTheme(getTheme());
+}
+
+function download(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function exportContacts() {
+  try { download("tally-contacts.json", await api.contacts.list()); }
+  catch (e) { alert("Export failed: " + e.message); }
+}
+async function exportTransactions() {
+  try { download("tally-transactions.json", await api.transactions.list()); }
+  catch (e) { alert("Export failed: " + e.message); }
+}
+
+bootPage("settings");
+renderStatic();
+</script>
+
+</body>
+</html>

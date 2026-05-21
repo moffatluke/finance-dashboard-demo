@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Transactions · Tally</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+  <div id="sidebar-slot"></div>
+
+  <main class="main">
+    <div class="page">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">MONEY IN, MONEY OUT</div>
+          <h1 class="page-title">Transactions</h1>
+        </div>
+        <button class="btn btn-primary" onclick="openAddTx()">+ Add transaction</button>
+      </div>
+
+      <div id="stats"></div>
+
+      <div class="toolbar">
+        <div class="pill-group" id="type-pills">
+          <button class="pill active" data-type="">All</button>
+          <button class="pill" data-type="income">Income</button>
+          <button class="pill" data-type="expense">Expense</button>
+        </div>
+        <div class="spacer"></div>
+        <div style="font-size:12px;color:var(--ink-faint);font-family:var(--font-mono);letter-spacing:0.04em" id="row-count">—</div>
+      </div>
+
+      <div id="content"><div class="loading">LOADING TRANSACTIONS…</div></div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-slot"></div>
+
+<script src="app.js"></script>
+<script>
+let allTx = [];
+let allContacts = [];
+let activeType = "";
+
+function render() {
+  const items = (activeType ? allTx.filter(t => t.type === activeType) : allTx)
+    .slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const totalIn = items.filter(t => t.type === "income").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const totalOut = items.filter(t => t.type === "expense").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+
+  document.getElementById("stats").innerHTML = `
+    <div class="row-3eq" style="margin-bottom:22px">
+      <div class="card card-sm">
+        <div style="font-size:12px;color:var(--ink-soft)">Money in</div>
+        <div style="font-family:var(--font-display);font-size:30px;color:var(--olive);line-height:1.3">${fmtMoney(totalIn)}</div>
+      </div>
+      <div class="card card-sm">
+        <div style="font-size:12px;color:var(--ink-soft)">Money out</div>
+        <div style="font-family:var(--font-display);font-size:30px;color:var(--primary);line-height:1.3">${fmtMoney(totalOut)}</div>
+      </div>
+      <div class="card card-sm">
+        <div style="font-size:12px;color:var(--ink-soft)">Net</div>
+        <div style="font-family:var(--font-display);font-size:30px;color:var(--slate);line-height:1.3">${fmtMoney(totalIn - totalOut)}</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("row-count").textContent = items.length + " ENTRIES";
+  window.__visibleTx = items;
+
+  if (allTx.length === 0) {
+    document.getElementById("content").innerHTML = `
+      <div class="empty">
+        <h2>Quiet books.</h2>
+        <p>Once you log income or expenses, they'll appear here, sortable and searchable.</p>
+        <button class="btn btn-primary" onclick="openAddTx()">+ Log a transaction</button>
+      </div>
+    `;
+    return;
+  }
+
+  document.getElementById("content").innerHTML = `
+    <div class="tx-table">
+      <div class="tx-row head">
+        <div>DATE</div><div>DESCRIPTION</div><div>CATEGORY</div><div>CONTACT</div><div>METHOD</div><div style="text-align:right">AMOUNT</div><div></div>
+      </div>
+      ${items.map((tx, i) => {
+        const contact = allContacts.find(c => c.id === tx.contactId);
+        return `
+          <div class="tx-row body">
+            <div class="tx-date">${fmtDate(tx.date)}</div>
+            <div style="color:var(--ink);display:flex;align-items:center">
+              <span class="tx-desc-dot ${tx.type === "income" ? "in" : "out"}"></span>
+              ${escapeHtml(tx.description)}
+            </div>
+            <div style="font-size:12px;color:var(--ink-soft)">${escapeHtml(tx.category)}</div>
+            <div style="font-size:12px;color:var(--ink-soft)">${contact ? `<a href="contact.html?id=${encodeURIComponent(contact.id)}" style="color:var(--ink-soft);text-decoration:none;border-bottom:1px dashed var(--line)">${escapeHtml(contact.name)}</a>` : "—"}</div>
+            <div style="font-size:12px;color:var(--ink-soft)">${escapeHtml(tx.paymentMethod || "—")}</div>
+            <div class="tx-amount ${tx.type === "income" ? "in" : ""}">${fmtSigned(tx.amount, tx.type)}</div>
+            <div class="tx-actions">
+              <button class="icon-btn" title="Edit" onclick="editTx(${i})" aria-label="Edit transaction">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+async function load() {
+  try {
+    [allTx, allContacts] = await Promise.all([api.transactions.list(), api.contacts.list()]);
+    document.getElementById("modal-slot").innerHTML = modalAddTransaction(allContacts);
+    render();
+  } catch (err) {
+    renderApiError(document.getElementById("content"), err);
+  }
+}
+
+function editTx(idx) {
+  const tx = (window.__visibleTx || [])[idx];
+  if (tx) openEditTx(tx);
+}
+
+document.getElementById("type-pills").addEventListener("click", (e) => {
+  if (!e.target.matches("[data-type]")) return;
+  activeType = e.target.dataset.type;
+  document.querySelectorAll("#type-pills .pill").forEach(p => p.classList.toggle("active", p === e.target));
+  render();
+});
+
+bootPage("transactions");
+load();
+</script>
+
+</body>
+</html>
