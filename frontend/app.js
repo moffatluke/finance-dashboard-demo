@@ -1,4 +1,4 @@
-// Tally — shared utilities. Loaded by every page.
+// Finance Dashboard — shared utilities. Loaded by every page.
 
 // ─── Formatters ─────────────────────────────────────────────
 const fmtMoney = (n) => "$" + (Number(n) || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -67,10 +67,9 @@ function renderSidebar(activePage) {
   return `
     <aside class="sidebar">
       <a href="dashboard.html" class="brand" style="text-decoration:none">
-        <div class="brand-mark">t</div>
+        <div class="brand-mark">F</div>
         <div>
-          <div class="brand-name">Tally</div>
-          <div class="brand-sub">HEARTH · WORKSPACE</div>
+          <div class="brand-name">Finance Dashboard</div>
         </div>
       </a>
       ${NAV.map(n => `

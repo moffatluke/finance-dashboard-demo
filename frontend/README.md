@@ -1,10 +1,5 @@
 # Tally — frontend (Hearth)
 
-Vanilla HTML/CSS/JS frontend for the Flask + Firestore backend. No build step,
-no npm. Drop the `frontend/` folder into your project alongside `app.py` and
-your existing routes; Flask's `send_from_directory("frontend")` (already wired
-in `app.py`) serves these files at `/`, `/dashboard.html`, etc.
-
 ## What's here
 
 ```
@@ -19,12 +14,6 @@ frontend/
   styles.css          → all visual styles; tokens via CSS custom properties
 ```
 
-## Install
-
-1. Copy the entire `frontend/` folder into your project root (next to `app.py`),
-   replacing the empty `frontend/` directory.
-2. No new Python dependencies. The frontend is plain HTML/JS — Flask already
-   serves it via the existing routes in `app.py`.
 
 ## Run
 
@@ -56,17 +45,7 @@ await api.transactions.create(data);   // POST /api/transactions
 
 Modal save handlers call these and then `location.reload()` to refresh the view.
 
-## Theme
-
-`Seaside` (the default, cream + coral) and `Cappuccino` (warm latte + espresso)
-both live in `styles.css` as CSS custom properties. The toggle in the sidebar
-and on the Settings page persists the choice in `localStorage` under
-`tally-theme`.
-
 ## Things deliberately not built (yet)
-
-These are flagged with friendly placeholders in the UI; wire them when you're
-ready:
 
 - **Edit-contact form** — the Edit button on a contact detail page just alerts.
   Backend already supports `PUT /api/contacts/<id>`; reuse the add-contact
@@ -76,11 +55,3 @@ ready:
 - **Editing/deleting transactions from the list** — only delete-contact is
   wired. Add a row-action menu on `transactions.html` when needed.
 
-## Files you'll edit most
-
-- **`styles.css`** — change palette, fonts, spacing, radii. Everything else
-  consumes these tokens.
-- **`app.js`** — add new API methods or modals here so every page can use them.
-- **Each `*.html`** — page-specific layout and the small render script at the
-  bottom. Each one fetches its data, builds an HTML string, drops it into
-  `#content`.
