@@ -1,11 +1,18 @@
-import firebase_admin # import all the firebase stuff
-# the firebase_admin is the official Python library to talking to firebase
-from firebase_admin import credentials, firestore # Taking out the credentials(authenticating) firestore(db)
-from dotenv import load_dotenv # .dotenv reads the .env files
-import os # access environment variables
+import firebase_admin
+from firebase_admin import credentials, firestore
+from dotenv import load_dotenv
+import os
+import json
 
-load_dotenv() # reads the .env file and loads
+load_dotenv()
 
-cred = credentials.Certificate(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")) 
-firebase_admin.initialize_app(cred) # like logging in
-db = firestore.client() # creates the db client object
+# Vercel: set FIREBASE_CREDENTIALS to the full service account JSON string
+# Local: set GOOGLE_APPLICATION_CREDENTIALS to the path of serviceAccount.json
+cred_json = os.getenv("FIREBASE_CREDENTIALS")
+if cred_json:
+    cred = credentials.Certificate(json.loads(cred_json))
+else:
+    cred = credentials.Certificate(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+
+firebase_admin.initialize_app(cred)
+db = firestore.client()
