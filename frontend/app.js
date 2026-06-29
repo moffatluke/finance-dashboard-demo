@@ -274,6 +274,13 @@ async function submitAddTransaction(e) {
 // Each page calls bootPage(activeId) — it renders the sidebar and
 // fetches the small "this week" stat for the bottom of the sidebar.
 async function bootPage(activeId) {
+  // Demo banner
+  const banner = document.createElement("div");
+  banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--primary);color:#fff;text-align:center;padding:8px 16px;font-size:13px;font-family:var(--font-body)";
+  banner.textContent = "👀 Demo mode — data is read-only. Changes won't be saved.";
+  document.body.prepend(banner);
+  document.body.style.paddingTop = "36px";
+
   document.getElementById("sidebar-slot").innerHTML = renderSidebar(activeId);
   // Pull a tiny stat so the sidebar feels alive
   try {
